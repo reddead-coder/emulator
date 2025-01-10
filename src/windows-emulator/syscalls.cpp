@@ -3386,6 +3386,44 @@ namespace
 
         return STATUS_SUCCESS;
     }
+    NTSTATUS handle_NtUserRegisterClassExWOW(const syscall_context& c, const emulator_object<WNDCLASSEXW> lpwcx)
+    {
+        static uint16_t class_id = 1;
+
+        try
+        {
+
+
+            WNDCLASSEXW wndClassEx = lpwcx.read(); // Read the WNDCLASSEXW structure from emulator_object
+
+            c.win_emu.log.print(color::cyan, "WNDCLASSEXW Details:\n");
+            c.win_emu.log.print(color::cyan, "Size: %u\n", wndClassEx.cbSize);
+            c.win_emu.log.print(color::cyan, "Style: %u\n", wndClassEx.style);
+            c.win_emu.log.print(color::cyan, "WndProc: %p\n", wndClassEx.lpfnWndProc);
+            c.win_emu.log.print(color::cyan, "Class Extra: %d\n", wndClassEx.cbClsExtra);
+            c.win_emu.log.print(color::cyan, "Window Extra: %d\n", wndClassEx.cbWndExtra);
+            c.win_emu.log.print(color::cyan, "Instance: %p\n", wndClassEx.hInstance);
+            c.win_emu.log.print(color::cyan, "Icon: %p\n", wndClassEx.hIcon);
+            c.win_emu.log.print(color::cyan, "Cursor: %p\n", wndClassEx.hCursor);
+            c.win_emu.log.print(color::cyan, "Background: %p\n", wndClassEx.hbrBackground);
+            c.win_emu.log.print(color::cyan, "Menu Name: %s\n", wndClassEx.lpszMenuName);
+            c.win_emu.log.print(color::cyan, "Class Name: %s\n", wndClassEx.lpszClassName);
+            c.win_emu.log.print(color::cyan, "Icon Sm: %p\n", wndClassEx.hIconSm);
+        }
+        catch (const std::exception& e)
+        {
+            c.win_emu.log.print(color::red, "Exception: %s\n", e.what());
+            return STATUS_UNSUCCESSFUL;
+        }
+        catch (...)
+        {
+            c.win_emu.log.print(color::red, "Unknown exception occurred.\n");
+            return STATUS_UNSUCCESSFUL;
+        }
+
+        return STATUS_SUCCESS;
+    }
+
 }
 
 void syscall_dispatcher::add_handlers(std::map<std::string, syscall_handler>& handler_mapping)
@@ -3497,6 +3535,7 @@ void syscall_dispatcher::add_handlers(std::map<std::string, syscall_handler>& ha
     add_handler(NtQueryDirectoryFileEx);
     add_handler(NtUserSystemParametersInfo);
     add_handler(NtGetContextThread);
+    add_handler(NtUserRegisterClassExWOW);
 
 #undef add_handler
 }
