@@ -3386,42 +3386,57 @@ namespace
 
         return STATUS_SUCCESS;
     }
-    NTSTATUS handle_NtUserRegisterClassExWOW(const syscall_context& c, const emulator_object<WNDCLASSEXW> lpwcx)
+    typedef struct _UNICODE_STRING
     {
-        static uint16_t class_id = 1;
+        USHORT Length;
+        USHORT MaximumLength;
+        PWSTR Buffer;
+    } UNICODE_STRING;
+    typedef UNICODE_STRING* PUNICODE_STRING;
+    typedef struct _CLSMENUNAME
+    {
+        LPSTR pszClientAnsiMenuName;
+        LPWSTR pwszClientUnicodeMenuName;
+        PUNICODE_STRING pusMenuName;
+    } CLSMENUNAME, *PCLSMENUNAME;
+    NTSTATUS handle_NtUserRegisterClassExWOW(const syscall_context& c, const emulator_object<WNDCLASSEXW> lpwcx,
+                                             emulator_object<UNICODE_STRING> pustrClassName,
+                                             emulator_object<UNICODE_STRING> ClsNVersion,
+                                             emulator_object<CLSMENUNAME> pClassMenuName
+                                             )
+    {
 
-        try
-        {
+
+            WNDCLASSEXW wndClassEx = lpwcx.read();
+            uint16_t index = 0;
+            
+            std::wstring name{};
+
+            std::wstring classname0 = c.emu.read_memory<std::wstring>(wndClassEx.lpszClassName);
+            c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname0);
+
+            UNICODE_STRING clas = pustrClassName.read();
+            std::wstring classname = c.emu.read_memory<std::wstring>(clas.Buffer);
+             c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname);
+
+             UNICODE_STRING clas2 = ClsNVersion.read();
+             std::wstring classname2 = c.emu.read_memory<std::wstring>(clas2.Buffer);
+             c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname2);
+
+            name = L"1234";
 
 
-            WNDCLASSEXW wndClassEx = lpwcx.read(); // Read the WNDCLASSEXW structure from emulator_object
+            if (!c.proc.atoms.empty())
+            {
+                auto i = c.proc.atoms.end();
+                --i;
+                index = i->first + 1;
+            }
+            c.proc.atoms[index] = std::move (name);
 
-            c.win_emu.log.print(color::cyan, "WNDCLASSEXW Details:\n");
-            c.win_emu.log.print(color::cyan, "Size: %u\n", wndClassEx.cbSize);
-            c.win_emu.log.print(color::cyan, "Style: %u\n", wndClassEx.style);
-            c.win_emu.log.print(color::cyan, "WndProc: %p\n", wndClassEx.lpfnWndProc);
-            c.win_emu.log.print(color::cyan, "Class Extra: %d\n", wndClassEx.cbClsExtra);
-            c.win_emu.log.print(color::cyan, "Window Extra: %d\n", wndClassEx.cbWndExtra);
-            c.win_emu.log.print(color::cyan, "Instance: %p\n", wndClassEx.hInstance);
-            c.win_emu.log.print(color::cyan, "Icon: %p\n", wndClassEx.hIcon);
-            c.win_emu.log.print(color::cyan, "Cursor: %p\n", wndClassEx.hCursor);
-            c.win_emu.log.print(color::cyan, "Background: %p\n", wndClassEx.hbrBackground);
-            c.win_emu.log.print(color::cyan, "Menu Name: %s\n", wndClassEx.lpszMenuName);
-            c.win_emu.log.print(color::cyan, "Class Name: %s\n", wndClassEx.lpszClassName);
-            c.win_emu.log.print(color::cyan, "Icon Sm: %p\n", wndClassEx.hIconSm);
-        }
-        catch (const std::exception& e)
-        {
-            c.win_emu.log.print(color::red, "Exception: %s\n", e.what());
-            return STATUS_UNSUCCESSFUL;
-        }
-        catch (...)
-        {
-            c.win_emu.log.print(color::red, "Unknown exception occurred.\n");
-            return STATUS_UNSUCCESSFUL;
-        }
+      
 
-        return STATUS_SUCCESS;
+        return index;
     }
 
 }
