@@ -3439,16 +3439,16 @@ namespace
             
             std::wstring name{};
 
-            std::wstring classname0 = c.emu.read_memory<std::wstring>(wndClassEx.lpszClassName);
+            const auto classname0 = c.emu.read_memory<std::wstring>(wndClassEx.lpszClassName);
             c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname0);
 
-            UNICODE_STRING clas = pustrClassName.read();
+            const auto clas = pustrClassName.read();
             std::wstring classname = c.emu.read_memory<std::wstring>(clas.Buffer);
-             c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname);
+            c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname);
 
-             UNICODE_STRING clas2 = ClsNVersion.read();
-             std::wstring classname2 = c.emu.read_memory<std::wstring>(clas2.Buffer);
-             c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname2);
+            const auto clas2 = ClsNVersion.read();
+            std::wstring classname2 = c.emu.read_memory<std::wstring>(clas2.Buffer);
+            c.win_emu.log.print(color::gray, "ClassName :%ls\n", classname2);
 
             name = L"1234";
 
