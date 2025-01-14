@@ -15,10 +15,8 @@ namespace
     emulator_object<T> allocate_object_on_stack(x64_emulator& emu)
     {
         const auto old_sp = emu.reg(x64_register::rsp);
-        const auto new_sp =
-            align_down(old_sp - sizeof(CONTEXT64), std::max(alignof(CONTEXT64), alignof(x64_emulator::pointer_type)));
+        const auto new_sp = align_down(old_sp - sizeof(T), std::max(alignof(T), alignof(x64_emulator::pointer_type)));
         emu.reg(x64_register::rsp, new_sp);
-
         return {emu, new_sp};
     }
 
@@ -266,6 +264,10 @@ namespace
             peb.OSPlatformId = 2;
             peb.OSMajorVersion = 0x0000000a;
             peb.OSBuildNumber = 0x00006c51;
+
+            // peb.AnsiCodePageData = allocator.reserve<CPTABLEINFO>().value();
+            // peb.OemCodePageData = allocator.reserve<CPTABLEINFO>().value();
+            peb.UnicodeCaseTableData = allocator.reserve<NLSTABLEINFO>().value();
         });
     }
 
@@ -405,8 +407,10 @@ namespace
         });
     }
 
-    void dispatch_access_violation(x64_emulator& emu, const uint64_t dispatcher, const uint64_t address,
-                                   const memory_operation operation)
+    template <typename T>
+        requires(std::is_integral_v<T>)
+    void dispatch_exception(x64_emulator& emu, const process_context& proc, const T status,
+                            const std::vector<EmulatorTraits<Emu64>::ULONG_PTR>& parameters)
     {
         CONTEXT64 ctx{};
         ctx.ContextFlags = CONTEXT64_ALL;
@@ -414,40 +418,47 @@ namespace
 
         EMU_EXCEPTION_RECORD<EmulatorTraits<Emu64>> record{};
         memset(&record, 0, sizeof(record));
-        record.ExceptionCode = static_cast<DWORD>(STATUS_ACCESS_VIOLATION);
+        record.ExceptionCode = static_cast<DWORD>(status);
         record.ExceptionFlags = 0;
         record.ExceptionRecord = 0;
-        record.ExceptionAddress = static_cast<EmulatorTraits<Emu64>::PVOID>(emu.read_instruction_pointer());
-        record.NumberParameters = 2;
-        record.ExceptionInformation[0] = map_violation_operation_to_parameter(operation);
-        record.ExceptionInformation[1] = address;
+        record.ExceptionAddress = emu.read_instruction_pointer();
+        record.NumberParameters = static_cast<DWORD>(parameters.size());
+
+        if (parameters.size() > 15)
+        {
+            throw std::runtime_error("Too many exception parameters");
+        }
+
+        for (size_t i = 0; i < parameters.size(); ++i)
+        {
+            record.ExceptionInformation[i] = parameters[i];
+        }
 
         EMU_EXCEPTION_POINTERS<EmulatorTraits<Emu64>> pointers{};
         pointers.ContextRecord = reinterpret_cast<EmulatorTraits<Emu64>::PVOID>(&ctx);
         pointers.ExceptionRecord = reinterpret_cast<EmulatorTraits<Emu64>::PVOID>(&record);
 
-        dispatch_exception_pointers(emu, dispatcher, pointers);
+        dispatch_exception_pointers(emu, proc.ki_user_exception_dispatcher, pointers);
     }
 
-    void dispatch_illegal_instruction_violation(x64_emulator& emu, const uint64_t dispatcher)
+    void dispatch_access_violation(x64_emulator& emu, const process_context& proc, const uint64_t address,
+                                   const memory_operation operation)
     {
-        CONTEXT64 ctx{};
-        ctx.ContextFlags = CONTEXT64_ALL;
-        context_frame::save(emu, ctx);
+        dispatch_exception(emu, proc, STATUS_ACCESS_VIOLATION,
+                           {
+                               map_violation_operation_to_parameter(operation),
+                               address,
+                           });
+    }
 
-        EMU_EXCEPTION_RECORD<EmulatorTraits<Emu64>> record{};
-        memset(&record, 0, sizeof(record));
-        record.ExceptionCode = static_cast<DWORD>(STATUS_ILLEGAL_INSTRUCTION);
-        record.ExceptionFlags = 0;
-        record.ExceptionRecord = 0;
-        record.ExceptionAddress = static_cast<EmulatorTraits<Emu64>::PVOID>(emu.read_instruction_pointer());
-        record.NumberParameters = 0;
+    void dispatch_illegal_instruction_violation(x64_emulator& emu, const process_context& proc)
+    {
+        dispatch_exception(emu, proc, STATUS_ILLEGAL_INSTRUCTION, {});
+    }
 
-        EMU_EXCEPTION_POINTERS<EmulatorTraits<Emu64>> pointers{};
-        pointers.ContextRecord = reinterpret_cast<EmulatorTraits<Emu64>::PVOID>(&ctx);
-        pointers.ExceptionRecord = reinterpret_cast<EmulatorTraits<Emu64>::PVOID>(&record);
-
-        dispatch_exception_pointers(emu, dispatcher, pointers);
+    void dispatch_integer_division_by_zero(x64_emulator& emu, const process_context& proc)
+    {
+        dispatch_exception(emu, proc, STATUS_INTEGER_DIVIDE_BY_ZERO, {});
     }
 
     void perform_context_switch_work(windows_emulator& win_emu)
@@ -458,9 +469,9 @@ namespace
         const auto was_blocked = devices.block_mutation(true);
         const auto _ = utils::finally([&] { devices.block_mutation(was_blocked); });
 
-        for (auto& device : devices)
+        for (auto& dev : devices | std::views::values)
         {
-            device.second.work(win_emu);
+            dev.work(win_emu);
         }
     }
 
@@ -515,11 +526,11 @@ namespace
 
         bool next_thread = false;
 
-        for (auto& thread : context.threads)
+        for (auto& t : context.threads | std::views::values)
         {
             if (next_thread)
             {
-                if (switch_to_thread(win_emu, thread.second))
+                if (switch_to_thread(win_emu, t))
                 {
                     return true;
                 }
@@ -527,15 +538,15 @@ namespace
                 continue;
             }
 
-            if (&thread.second == context.active_thread)
+            if (&t == context.active_thread)
             {
                 next_thread = true;
             }
         }
 
-        for (auto& thread : context.threads)
+        for (auto& t : context.threads | std::views::values)
         {
-            if (switch_to_thread(win_emu, thread.second))
+            if (switch_to_thread(win_emu, t))
             {
                 return true;
             }
@@ -544,7 +555,7 @@ namespace
         return false;
     }
 
-    bool is_object_signaled(process_context& c, const handle h, uint32_t current_thread_id)
+    bool is_object_signaled(process_context& c, const handle h, const uint32_t current_thread_id)
     {
         const auto type = h.value.type;
 
@@ -796,7 +807,7 @@ void windows_emulator::perform_thread_switch()
     }
 }
 
-void windows_emulator::on_instruction_execution(uint64_t address)
+void windows_emulator::on_instruction_execution(const uint64_t address)
 {
     auto& process = this->process();
     auto& thread = this->current_thread();
@@ -889,9 +900,15 @@ void windows_emulator::setup_hooks()
     });
 
     this->emu().hook_interrupt([&](const int interrupt) {
+        if (interrupt == 0)
+        {
+            dispatch_integer_division_by_zero(this->emu(), this->process());
+            return;
+        }
+
         if (interrupt == 6)
         {
-            dispatch_illegal_instruction_violation(this->emu(), this->process().ki_user_exception_dispatcher);
+            dispatch_illegal_instruction_violation(this->emu(), this->process());
             return;
         }
 
@@ -929,7 +946,7 @@ void windows_emulator::setup_hooks()
             return memory_violation_continuation::stop;
         }
 
-        dispatch_access_violation(this->emu(), this->process().ki_user_exception_dispatcher, address, operation);
+        dispatch_access_violation(this->emu(), this->process(), address, operation);
         return memory_violation_continuation::resume;
     });
 

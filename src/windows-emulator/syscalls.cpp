@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <utils/io.hpp>
 #include <utils/string.hpp>
+#include <utils/time.hpp>
 #include <utils/finally.hpp>
 
 #include <sys/stat.h>
@@ -360,7 +361,7 @@ namespace
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported thread set info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported thread set info class: %X\n", info_class);
         c.emu.stop();
         return STATUS_NOT_SUPPORTED;
     }
@@ -476,9 +477,9 @@ namespace
 
         if (!name.empty())
         {
-            for (const auto& mutant : c.proc.mutants)
+            for (const auto& mutant : c.proc.mutants | std::views::values)
             {
-                if (mutant.second.name == name)
+                if (mutant.name == name)
                 {
                     return STATUS_OBJECT_NAME_EXISTS;
                 }
@@ -517,9 +518,9 @@ namespace
 
         if (!name.empty())
         {
-            for (const auto& event : c.proc.events)
+            for (const auto& event : c.proc.events | std::views::values)
             {
-                if (event.second.name == name)
+                if (event.name == name)
                 {
                     return STATUS_OBJECT_NAME_EXISTS;
                 }
@@ -568,7 +569,7 @@ namespace
     {
         if (fs_information_class != FileFsDeviceInformation)
         {
-            printf("Unsupported fs info class: %X\n", fs_information_class);
+            c.win_emu.log.error("Unsupported fs info class: %X\n", fs_information_class);
             c.emu.stop();
             return STATUS_NOT_SUPPORTED;
         }
@@ -799,7 +800,7 @@ namespace
                 image_info.AllocationBase = reinterpret_cast<void*>(region_info.allocation_base);
                 image_info.AllocationProtect = 0;
                 image_info.PartitionId = 0;
-                image_info.RegionSize = region_info.length;
+                image_info.RegionSize = static_cast<int64_t>(region_info.length);
                 image_info.State =
                     region_info.is_committed ? MEM_COMMIT : (region_info.is_reserved ? MEM_RESERVE : MEM_FREE);
                 image_info.Protect = map_emulator_to_nt_protection(region_info.permissions);
@@ -824,7 +825,7 @@ namespace
             const auto mod = c.proc.mod_manager.find_by_address(base_address);
             if (!mod)
             {
-                printf("Bad address for memory image request: 0x%" PRIx64 "\n", base_address);
+                c.win_emu.log.error("Bad address for memory image request: 0x%" PRIx64 "\n", base_address);
                 return STATUS_INVALID_ADDRESS;
             }
 
@@ -865,14 +866,14 @@ namespace
                 image_info.AllocationBase = reinterpret_cast<void*>(region_info.allocation_base);
                 image_info.AllocationProtect = 0;
                 image_info.PartitionId = 0;
-                image_info.RegionSize = region_info.allocation_length;
+                image_info.RegionSize = static_cast<int64_t>(region_info.allocation_length);
                 image_info.Reserved = 0x10;
             });
 
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported memory info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported memory info class: %X\n", info_class);
         c.emu.stop();
         return STATUS_NOT_SUPPORTED;
     }
@@ -1002,7 +1003,7 @@ namespace
 
         if (info_class != SystemBasicInformation && info_class != SystemEmulationBasicInformation)
         {
-            printf("Unsupported system info class: %X\n", info_class);
+            c.win_emu.log.error("Unsupported system info class: %X\n", info_class);
             c.emu.stop();
             return STATUS_NOT_SUPPORTED;
         }
@@ -1139,14 +1140,14 @@ namespace
                 return STATUS_SUCCESS;
             }
 
-            printf("Unsupported processor relationship: %X\n", request);
+            c.win_emu.log.error("Unsupported processor relationship: %X\n", request);
             c.emu.stop();
             return STATUS_NOT_SUPPORTED;
         }
 
         if (info_class != SystemBasicInformation && info_class != SystemEmulationBasicInformation)
         {
-            printf("Unsupported system info ex class: %X\n", info_class);
+            c.win_emu.log.error("Unsupported system info ex class: %X\n", info_class);
             c.emu.stop();
             return STATUS_NOT_SUPPORTED;
         }
@@ -1365,7 +1366,7 @@ namespace
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported process info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported process info class: %X\n", info_class);
         c.emu.stop();
 
         return STATUS_NOT_SUPPORTED;
@@ -1440,7 +1441,7 @@ namespace
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported thread query info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported thread query info class: %X\n", info_class);
         c.emu.stop();
 
         return STATUS_NOT_SUPPORTED;
@@ -1487,7 +1488,7 @@ namespace
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported set file info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported set file info class: %X\n", info_class);
         c.emu.stop();
 
         return STATUS_NOT_SUPPORTED;
@@ -1622,7 +1623,7 @@ namespace
                                                                       query_flags, f);
         }
 
-        printf("Unsupported query directory file info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported query directory file info class: %X\n", info_class);
         c.emu.stop();
 
         return STATUS_NOT_SUPPORTED;
@@ -1723,7 +1724,7 @@ namespace
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported query file info class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported query file info class: %X\n", info_class);
         c.emu.stop();
 
         return STATUS_NOT_SUPPORTED;
@@ -1808,7 +1809,7 @@ namespace
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported info process class: %X\n", info_class);
+        c.win_emu.log.error("Unsupported info process class: %X\n", info_class);
         c.emu.stop();
 
         return STATUS_NOT_SUPPORTED;
@@ -2458,13 +2459,13 @@ namespace
 
             c.emu.write_memory(token_information, TOKEN_BNO_ISOLATION_INFORMATION64{
                                                       .IsolationPrefix = 0,
-                                                      .IsolationEnabled = 0,
+                                                      .IsolationEnabled = FALSE,
                                                   });
 
             return STATUS_SUCCESS;
         }
 
-        printf("Unsupported token info class: %X\n", token_information_class);
+        c.win_emu.log.error("Unsupported token info class: %X\n", token_information_class);
         c.emu.stop();
         return STATUS_NOT_SUPPORTED;
     }
@@ -2629,7 +2630,7 @@ namespace
     NTSTATUS handle_NtReadFile(const syscall_context& c, const handle file_handle, const uint64_t /*event*/,
                                const uint64_t /*apc_routine*/, const uint64_t /*apc_context*/,
                                const emulator_object<IO_STATUS_BLOCK<EmulatorTraits<Emu64>>> io_status_block,
-                               uint64_t buffer, const ULONG length,
+                               const uint64_t buffer, const ULONG length,
                                const emulator_object<LARGE_INTEGER> /*byte_offset*/,
                                const emulator_object<ULONG> /*key*/)
     {
@@ -2658,7 +2659,7 @@ namespace
     NTSTATUS handle_NtWriteFile(const syscall_context& c, const handle file_handle, const uint64_t /*event*/,
                                 const uint64_t /*apc_routine*/, const uint64_t /*apc_context*/,
                                 const emulator_object<IO_STATUS_BLOCK<EmulatorTraits<Emu64>>> io_status_block,
-                                uint64_t buffer, const ULONG length,
+                                const uint64_t buffer, const ULONG length,
                                 const emulator_object<LARGE_INTEGER> /*byte_offset*/,
                                 const emulator_object<ULONG> /*key*/)
     {
@@ -2894,9 +2895,9 @@ namespace
         }
 
         file_information.access([&](FILE_BASIC_INFORMATION& info) {
-            info.CreationTime = convert_unix_to_windows_time(file_stat.st_atime);
-            info.LastAccessTime = convert_unix_to_windows_time(file_stat.st_atime);
-            info.LastWriteTime = convert_unix_to_windows_time(file_stat.st_mtime);
+            info.CreationTime = utils::convert_unix_to_windows_time(file_stat.st_atime);
+            info.LastAccessTime = utils::convert_unix_to_windows_time(file_stat.st_atime);
+            info.LastWriteTime = utils::convert_unix_to_windows_time(file_stat.st_mtime);
             info.ChangeTime = info.LastWriteTime;
             info.FileAttributes = FILE_ATTRIBUTE_NORMAL;
         });
@@ -2966,7 +2967,7 @@ namespace
     NTSTATUS handle_NtRaiseException(const syscall_context& c,
                                      const emulator_object<EMU_EXCEPTION_RECORD<EmulatorTraits<Emu64>>>
                                      /*exception_record*/,
-                                     const emulator_object<CONTEXT64> thread_context, BOOLEAN handle_exception)
+                                     const emulator_object<CONTEXT64> thread_context, const BOOLEAN handle_exception)
     {
         if (handle_exception)
         {
@@ -3036,9 +3037,9 @@ namespace
 
         if (!s.name.empty())
         {
-            for (const auto& semaphore : c.proc.semaphores)
+            for (const auto& semaphore : c.proc.semaphores | std::views::values)
             {
-                if (semaphore.second.name == s.name)
+                if (semaphore.name == s.name)
                 {
                     return STATUS_OBJECT_NAME_EXISTS;
                 }
@@ -3184,7 +3185,7 @@ namespace
                     }
                     else
                     {
-                        printf("Unsupported thread attribute type: %" PRIx64 "\n", type);
+                        c.win_emu.log.error("Unsupported thread attribute type: %" PRIx64 "\n", type);
                     }
                 },
                 i);
@@ -3196,6 +3197,21 @@ namespace
     NTSTATUS handle_NtQueryDebugFilterState()
     {
         return FALSE;
+    }
+
+    NTSTATUS handle_NtUserGetDpiForCurrentProcess()
+    {
+        return 96;
+    }
+
+    NTSTATUS handle_NtUserGetDCEx()
+    {
+        return 1;
+    }
+
+    NTSTATUS handle_NtUserModifyUserStartupInfoFlags()
+    {
+        return STATUS_SUCCESS;
     }
 
     bool is_awaitable_object_type(const handle h)
@@ -3239,7 +3255,7 @@ namespace
 
         if (timeout.value() && !t.await_time.has_value())
         {
-            t.await_time = convert_delay_interval_to_time_point(timeout.read());
+            t.await_time = utils::convert_delay_interval_to_time_point(timeout.read());
         }
 
         c.win_emu.yield_thread();
@@ -3266,7 +3282,7 @@ namespace
 
         if (timeout.value() && !t.await_time.has_value())
         {
-            t.await_time = convert_delay_interval_to_time_point(timeout.read());
+            t.await_time = utils::convert_delay_interval_to_time_point(timeout.read());
         }
 
         c.win_emu.yield_thread();
@@ -3302,7 +3318,7 @@ namespace
         }
 
         auto& t = c.win_emu.current_thread();
-        t.await_time = convert_delay_interval_to_time_point(delay_interval.read());
+        t.await_time = utils::convert_delay_interval_to_time_point(delay_interval.read());
 
         c.win_emu.yield_thread();
 
@@ -3311,11 +3327,11 @@ namespace
 
     NTSTATUS handle_NtAlertThreadByThreadId(const syscall_context& c, const uint64_t thread_id)
     {
-        for (auto& t : c.proc.threads)
+        for (auto& t : c.proc.threads | std::views::values)
         {
-            if (t.second.id == thread_id)
+            if (t.id == thread_id)
             {
-                t.second.alerted = true;
+                t.alerted = true;
                 return STATUS_SUCCESS;
             }
         }
@@ -3344,7 +3360,7 @@ namespace
 
         if (timeout.value() && !t.await_time.has_value())
         {
-            t.await_time = convert_delay_interval_to_time_point(timeout.read());
+            t.await_time = utils::convert_delay_interval_to_time_point(timeout.read());
         }
 
         c.win_emu.yield_thread();
@@ -3360,7 +3376,12 @@ namespace
         return STATUS_SUCCESS;
     }
 
-    NTSTATUS handle_NtGetContextThread(const syscall_context& c, handle thread_handle,
+    NTSTATUS handle_NtSetInformationVirtualMemory(const syscall_context&)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    NTSTATUS handle_NtGetContextThread(const syscall_context& c, const handle thread_handle,
                                        const emulator_object<CONTEXT64> thread_context)
     {
         const auto* thread = thread_handle == CURRENT_THREAD ? c.proc.active_thread : c.proc.threads.get(thread_handle);
@@ -3384,6 +3405,12 @@ namespace
             context_frame::save(c.emu, context);
         });
 
+        return STATUS_SUCCESS;
+    }
+
+    NTSTATUS handle_NtYieldExecution(const syscall_context& c)
+    {
+        c.win_emu.yield_thread();
         return STATUS_SUCCESS;
     }
     typedef struct _UNICODE_STRING
@@ -3456,6 +3483,7 @@ void syscall_dispatcher::add_handlers(std::map<std::string, syscall_handler>& ha
     add_handler(NtAllocateVirtualMemory);
     add_handler(NtQueryInformationProcess);
     add_handler(NtSetInformationProcess);
+    add_handler(NtSetInformationVirtualMemory);
     add_handler(NtFreeVirtualMemory);
     add_handler(NtQueryVirtualMemory);
     add_handler(NtOpenThreadToken);
@@ -3550,6 +3578,10 @@ void syscall_dispatcher::add_handlers(std::map<std::string, syscall_handler>& ha
     add_handler(NtQueryDirectoryFileEx);
     add_handler(NtUserSystemParametersInfo);
     add_handler(NtGetContextThread);
+    add_handler(NtYieldExecution);
+    add_handler(NtUserModifyUserStartupInfoFlags);
+    add_handler(NtUserGetDCEx);
+    add_handler(NtUserGetDpiForCurrentProcess);
     add_handler(NtUserRegisterClassExWOW);
 
 #undef add_handler
